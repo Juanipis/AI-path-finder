@@ -4,6 +4,7 @@ import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point, LineString
 import plotly_express as px
+import time
 
 
 class Map:
@@ -106,11 +107,24 @@ class Map:
         return fig
 
 
+def geocode_with_retry(address, geolocator, max_retries=20, timeout=10):
+    retries = 0
+    while retries < max_retries:
+        try:
+            location = geolocator.geocode(address, timeout=timeout)
+            return location
+        except Exception:
+            retries += 1
+            print(f"Geocoder timed out, retrying... ({retries}/{max_retries})")
+            time.sleep(1)
+    return None
+
+
 class FromToMap:
     def __init__(self, start: str, end: str, G):
-        self.locator = Nominatim(user_agent="myGeocoder")
-        self.start_coordinates = self.locator.geocode(start)
-        self.end_coordinates = self.locator.geocode(end)
+        self.locator = Nominatim(user_agent="ai-eia-2024-1-isis")
+        self.start_coordinates = geocode_with_retry(start, self.locator)
+        self.end_coordinates = geocode_with_retry(end, self.locator)
 
         self.start = (self.start_coordinates.latitude, self.start_coordinates.longitude)
         self.end = (self.end_coordinates.latitude, self.end_coordinates.longitude)
