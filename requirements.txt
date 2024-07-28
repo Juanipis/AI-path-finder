@@ -4,3 +4,4 @@ pandas
 geopandas
 shapely
 plotly
+plotly_express
