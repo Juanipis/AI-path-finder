@@ -1,4 +1,6 @@
+# %load utils/map.py
 import osmnx as ox
+import networkx as nx
 from geopy.geocoders import Nominatim
 import pandas as pd
 import geopandas as gpd
@@ -12,6 +14,13 @@ class Map:
         self.location = location
         self.G = ox.graph_from_place(location, network_type="drive", simplify=simplify)
         self.show = ox.plot_graph(self.G, figsize=(25, 25))
+        self.nodes = pd.DataFrame([])
+        self.edges = pd.DataFrame([])
+    
+    def set_data(self):
+        self.add_nodes_edges()
+        self.add_speeds()
+        self.add_travel_times()
 
     def add_elevations(self, elevation_map: str, absolute: bool = True):
         self.G = ox.elevation.add_node_elevations_raster(self.G, elevation_map, band=1)
@@ -19,7 +28,7 @@ class Map:
 
     def add_speeds(self):
         hwy_speeds = {"residential": 35, "secondary": 50, "tertiary": 60}
-        self.G = ox.add_edge_speeds(self.G, hwy_speeds)
+        self.G = ox.add_edge_speeds(self.G, hwy_speeds, fallback=40)
 
     def add_travel_times(self):
         """
@@ -29,8 +38,32 @@ class Map:
 
     def add_nodes_edges(self):
         self.nodes, self.edges = ox.graph_to_gdfs(self.G)
+    
+    def calculate_heuristic(self, u, v):
+        return 1
+        # simple distance
+        # (x1, y1) = u
+        # (x2, y2) = u
+        # return ((x1 - x2) ** 2 + (y1 - y2) ** 2) ** 0.5
 
-    def get_route(self, start_node, end_node, weight):
+        
+        # self.G[u]
+        # # edge_data = self.edges.loc[(self.edges['u'] == u) & (self.edges['v'] == v)]
+        # # if edge_data.empty:
+        # #     edge_data = self.edges.loc[(self.edges['v'] == u) & (self.edges['u'] == v)]
+        # # # lanes and maxspeed
+        # # speed = edge_data.iloc[0].get('speed_kph', 50)
+        # # lanes = edge_data.iloc[0].get('lanes', 1)
+        
+        # # h = speed / lanes
+
+        # # return h
+    
+    def astar_route(self, start_node, end_node, weight="length"):
+        route = nx.astar_path(self.G, start_node, end_node, heuristic=self.calculate_heuristic, weight=weight)
+        return route
+
+    def shortest_route(self, start_node, end_node, weight="length"):
         route = ox.shortest_path(self.G, start_node, end_node, weight=weight)
         return route
 
@@ -120,8 +153,9 @@ def geocode_with_retry(address, geolocator, max_retries=20, timeout=10):
     return None
 
 
-class FromToMap:
-    def __init__(self, start: str, end: str, G):
+class PathFinder:
+    def __init__(self, start: str, end: str, map: Map):
+        self.map = map
         self.locator = Nominatim(user_agent="ai-eia-2024-1-isis")
         self.start_coordinates = geocode_with_retry(start, self.locator)
         self.end_coordinates = geocode_with_retry(end, self.locator)
@@ -129,5 +163,22 @@ class FromToMap:
         self.start = (self.start_coordinates.latitude, self.start_coordinates.longitude)
         self.end = (self.end_coordinates.latitude, self.end_coordinates.longitude)
 
-        self.start_node = ox.distance.nearest_nodes(G, self.start[1], self.start[0])
-        self.end_node = ox.distance.nearest_nodes(G, self.end[1], self.end[0])
+        self.start_node = ox.distance.nearest_nodes(map.G, self.start[1], self.start[0])
+        self.end_node = ox.distance.nearest_nodes(map.G, self.end[1], self.end[0])
+    
+    def display(self, route):
+        return self.map.display_interactive_route(route, self.start_node, self.end_node)
+    
+    def shortes_path(self):
+        """
+        Shows the shortest path based on 'length'
+        """
+        route = self.map.shortest_route(self.start_node, self.end_node)
+        return self.display(route)
+    
+    def astar_path(self):
+        """
+        Shows the shortest path using the A* algorithm
+        """
+        route = self.map.astar_route(self.start_node, self.end_node)
+        return self.display(route)
