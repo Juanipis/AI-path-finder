@@ -1,0 +1,8 @@
+osmnx
+geopy
+pandas
+geopandas
+shapely
+plotly
+plotly_express
+gradio
